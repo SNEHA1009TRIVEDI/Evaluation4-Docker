@@ -1,0 +1,93 @@
+services:
+  database:
+    restart: on-failure
+    image: postgres
+    ports:
+      - 5433:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123456
+      - POSTGRES_DB=database_dev
+  
+  cache:
+    image: redis
+    ports:
+      - 6380:6379
+
+  migrations:
+    build:
+      context: ../authentication/
+      dockerfile: Dockerfile.migration
+    environment:
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=123456
+      - AUTH_DATABASE=database_dev
+      - AUTH_HOST=database
+    depends_on:
+      - database
+
+  app:
+    build:
+      context: ../authentication/
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_HOST=cache
+      - REDIS_PORT=6379
+      - HOST=database
+    ports:
+      - 3001:3000
+    volumes:
+      - ../authentication/database/data:/var/lib/postgresql/data
+    depends_on:
+      - database
+      - cache
+      - migrations
+
+  backend-database:
+    image: postgres
+    ports:
+      - 5434:5432
+    volumes:
+      - ../backend/database/data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=database_backend
+  
+
+  backend-migrations:
+    build:
+      context: ../backend/
+      dockerfile: Dockerfile.migration
+    environment:
+      - BACKEND_DB_USERNAME=postgres
+      - BACKEND_DB_PASSWORD=postgres
+      - BACKEND_DATABASE=database_backend
+      - BACKEND_HOST=backend-database
+    depends_on:
+      - backend-database
+
+  server:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        - no_cache=1
+    volumes:
+      - ../backend/:/app/
+    environment:
+      - BACKEND_DB_USERNAME=postgres
+      - BACKEND_DB_PASSWORD=postgres
+      - BACKEND_DATABASE=database_backend
+      - BACKEND_HOST=backend-database
+      
+    ports:
+      - 5001:5000
+    # volumes:
+    #   - ../backend/database/data:/var/lib/postgresql/data
+    depends_on:
+      - backend-database
+      - backend-migrations
+
+
+   
